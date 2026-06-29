@@ -45,3 +45,6 @@ MANIFEST
 .DS_Store
 
 tech_blog_deployment.md
+
+.history/
+docs/
