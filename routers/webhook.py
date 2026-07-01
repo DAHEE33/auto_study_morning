@@ -35,7 +35,7 @@ def parse_duration_to_min(dur_str: str) -> int:
 def format_min_to_str(total_min: int) -> str:
     return f"{total_min // 60}시간 {total_min % 60}분"
 
-router = APIRouter(prefix="/webhook", tags=["Webhook"])
+router = APIRouter(prefix="/morning", tags=["Webhook"])
 
 # 봇이 사용자 요청 맥락을 기억하기 위한 상태 저장소 (메모리 방식)
 # 형태: { "UserKey": {"type": "반휴" | "특휴", "expires": datetime_object} }
