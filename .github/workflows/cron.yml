@@ -5,8 +5,8 @@ on:
     # 1. 매일 12:05 정오 (한국시간 KST 기준 12:05 = UTC 03:05)
     # 서버 시간 지연 등을 고려해 12:05으로 설정
     - cron: '5 3 * * *'
-    # 2. 매주 월요일 17:00 (KST 기준 17:00 = UTC 08:00)
-    - cron: '0 8 * * 1'
+    # 2. 매주 월요일 05:00 (KST 기준 월 05:00 = UTC 일 20:00)
+    - cron: '0 20 * * 0'
     
     # 3. 매주 수요일 스토리지 정리 (한국시간 수요일 KST 기준 12:05 = UTC 수요일 03:05)
     # - cron: '5 3 * * 3' 
@@ -48,7 +48,7 @@ jobs:
           python jobs/daily_summary.py
 
   weekly-leave-reset:
-    if: github.event.schedule == '0 8 * * 1'
+    if: github.event.schedule == '0 20 * * 0'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository

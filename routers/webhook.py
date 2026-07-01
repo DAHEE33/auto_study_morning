@@ -187,10 +187,10 @@ def process_photo_auth_in_background(
             return
 
         # 3. 목표시간 계산
-        bt_str = str(member_record.get("목표시간", "120")).strip()
+        bt_str = str(member_record.get("목표시간", "70")).strip()
         base_target = parse_duration_to_min(bt_str)
         if base_target == 0:
-            base_target = 120
+            base_target = 70
         final_target = target_override * 60 if target_override else base_target
 
         # 4. 시간 위조 및 지각 검증
@@ -206,17 +206,22 @@ def process_photo_auth_in_background(
         if clean_nick not in full_text.replace(" ", ""):
             print(f"⚠️ [주의] 닉네임 불일치 감지: DB={clean_nick}, OCR텍스트에 없음")
 
-        # 5. 벌금 계산
+        # 5. 07:30 이후 제출분은 지각 분만큼 인증시간 차감
+        effective_duration, deducted_minutes = bg_checkin.apply_late_minute_adjustment(
+            target_date, end_time, duration
+        )
+
+        # 6. 벌금 계산
         penalty = bg_engine.calculate_penalty(
             target_minutes=final_target,
-            auth_minutes=duration,
+            auth_minutes=effective_duration,
             is_late_submit=not is_ontime,
             is_fake_time=is_fake_time,
             is_fake_date=is_fake_date,
             is_absent=is_absent
         )
 
-        is_failed = is_absent or (duration < final_target)
+        is_failed = is_absent or (effective_duration < final_target)
         if is_failed:
             status_msg = "결석(목표미달)"
         elif is_fake_date:
@@ -240,7 +245,7 @@ def process_photo_auth_in_background(
                 col_updates.append((3, "예치금 소진"))
                 col_updates.append((13, now.strftime("%Y-%m-%d")))
 
-        dur_str = f"{duration//60}시간 {duration%60}분"
+        dur_str = f"{effective_duration//60}시간 {effective_duration%60}분"
         tot_str = f"{total_mnts//60}시간 {total_mnts%60}분"
         log_row = [target_date, nickname, auth_type, status_msg, "-", dur_str, tot_str, str(penalty), drive_url]
 
@@ -253,7 +258,7 @@ def process_photo_auth_in_background(
         bg_sheets.upsert_daily_log(log_row)
 
         print(f"[{request_id}] ✅ [백그라운드-사진인증] 완료: {nickname} → {status_msg}, 벌금={penalty}")
-        print(f"  - 금일공부: {dur_str}, 누적: {tot_str}, 목표: {final_target}분")
+        print(f"  - 금일공부(적용): {dur_str}, 누적: {tot_str}, 목표: {final_target}분, 지각차감: {deducted_minutes}분")
 
     except Exception as e:
         print(f"[{request_id}] ❌ [백그라운드-사진인증] 에러 발생: {e}")
@@ -353,7 +358,7 @@ async def kakao_webhook(request: Request, background_tasks: BackgroundTasks):
         
         if image_url or len(utterance) > 15 or is_button_click:
             return build_kakao_response(
-                "✨ 환영합니다! 평일 저녁 인증 스터디 봇입니다.\n"
+                "✨ 환영합니다! 기상 인증 스터디 봇입니다.\n"
                 "구루미 닉네임 = 오픈채팅방 닉네임과 동일하게 등록합니다.\n\n"
                 "사용하실 닉네임만 채팅창에 짧게 입력해 주세요!\n"
                 "(예: 키뮤)"
@@ -373,7 +378,7 @@ async def kakao_webhook(request: Request, background_tasks: BackgroundTasks):
                 "⚠️ 이미 사용 중인 닉네임입니다.\n"
                 "다른 닉네임으로 다시 입력해 주세요."
             )
-        new_row = [target_nick, userkey, "대기", "2시간 0분", "0시간 0분", "1.0", "1", "10000", "-", "-", target_date, "불가", "-"]
+        new_row = [target_nick, userkey, "대기", "1시간 10분", "0시간 0분", "1.0", "1", "10000", "-", "-", target_date, "불가", "-"]
         append_ok = sheets_client.append_row("Member_Master", new_row)
         if not append_ok:
             print(f"[{request_id}] ❌ 회원가입 append_row 실패 userkey={userkey}, nickname={target_nick}")
@@ -451,8 +456,8 @@ async def kakao_webhook(request: Request, background_tasks: BackgroundTasks):
             nums = re.findall(r'\d+', utterance)
             if nums:
                 new_target_minutes = int(nums[0])
-        if new_target_minutes < 120:
-            return build_kakao_response("❌ 목표시간은 최소 2시간(120분) 이상부터 입력 가능합니다.")
+        if new_target_minutes < 70:
+            return build_kakao_response("❌ 목표시간은 최소 70분 이상부터 입력 가능합니다.")
         sheets_client.update_cell("Member_Master", row_idx, 4, format_min_to_str(new_target_minutes))
         return build_kakao_response(f"✅ 목표 시간이 '{format_min_to_str(new_target_minutes)}'으로 변경 적용되었습니다!")
     
@@ -461,11 +466,11 @@ async def kakao_webhook(request: Request, background_tasks: BackgroundTasks):
         nums = re.findall(r'\d+', utterance)
         if not nums:
             user_states[userkey] = {"type": "목표변경", "expires": datetime.now() + timedelta(minutes=5)}
-            return build_kakao_response("🎯 목표시간 설정을 원하시나요?\n\n채팅창에 변경하실 시간과 함께 아래 양식으로 입력해 주세요!\n\n(예시)\n👉 목표변경 2시간 30분\n👉 목표시간 120\n👉 목표변경 3시간")
+            return build_kakao_response("🎯 목표시간 설정을 원하시나요?\n\n채팅창에 변경하실 시간과 함께 아래 양식으로 입력해 주세요!\n\n(예시)\n👉 목표변경 1시간 30분\n👉 목표시간 90\n👉 목표변경 70분")
             
         new_target_minutes = parse_duration_to_min(utterance)
-        if new_target_minutes < 120:
-            return build_kakao_response("❌ 목표시간은 최소 2시간(120분) 이상부터 입력 가능합니다.")
+        if new_target_minutes < 70:
+            return build_kakao_response("❌ 목표시간은 최소 70분 이상부터 입력 가능합니다.")
             
         sheets_client.update_cell("Member_Master", row_idx, 4, format_min_to_str(new_target_minutes))
         return build_kakao_response(f"✅ 목표 시간이 '{format_min_to_str(new_target_minutes)}'으로 변경 적용되었습니다!")
@@ -473,7 +478,7 @@ async def kakao_webhook(request: Request, background_tasks: BackgroundTasks):
     # --- ["목표 변경" 버튼 클릭 (숫자 없이)] ---
     if utterance == "목표 변경":
         user_states[userkey] = {"type": "목표변경", "expires": datetime.now() + timedelta(minutes=5)}
-        return build_kakao_response("🎯 목표시간 설정을 원하시나요?\n\n채팅창에 변경하실 시간과 함께 아래 양식으로 입력해 주세요!\n\n(예시)\n👉 목표변경 2시간 30분\n👉 목표시간 120\n👉 목표변경 3시간")
+        return build_kakao_response("🎯 목표시간 설정을 원하시나요?\n\n채팅창에 변경하실 시간과 함께 아래 양식으로 입력해 주세요!\n\n(예시)\n👉 목표변경 1시간 30분\n👉 목표시간 90\n👉 목표변경 70분")
 
     # 3. 사용자 발화(또는 Block명)로 인증/휴무 종류 분기 처리
     block_name = user_request.get("block", {}).get("name", "")
@@ -546,8 +551,8 @@ async def kakao_webhook(request: Request, background_tasks: BackgroundTasks):
 
     if not check_in_engine.is_action_allowed(action_type, now):
         if action_type in ("week_off", "month_off", "special_off"):
-            return build_kakao_response("❌ 처리 가능 시간이 지났습니다.\n(주휴/월휴/특휴 마감: 익일 12:00, 오픈: 당일 17:00)")
-        return build_kakao_response("❌ 처리 기간이 지났습니다.\n(일반/반휴 마감: 익일 02:00, 오픈: 당일 17:00)")
+            return build_kakao_response("❌ 처리 가능 시간이 지났습니다.\n(기상캠스 휴무 처리 가능 시간: 당일 12:00 이전)")
+        return build_kakao_response("❌ 처리 기간이 지났습니다.\n(기상캠스 인증 가능 시간: 05:30 ~ 07:40, 07:30 이후는 분 단위 차감 적용)")
 
     # 💡 [휴무일(자율참여) 우선 차단]
     admin_events = sheets_client.get_sheet_records("Admin_Config")
@@ -630,7 +635,7 @@ async def kakao_webhook(request: Request, background_tasks: BackgroundTasks):
             if is_half_off:
                 # 반휴 누르고 아직 사진 안 보냈으므로 상태 기억!
                 user_states[userkey] = {"type": "반휴", "expires": now + timedelta(minutes=10)}
-                reply_text = "🌗 반휴 적용을 위해 오늘 최소 1시간을 달성한 구루미 타이머 사진을 전송해 주세요. (이제 텍스트 없이 사진만 보내도 됩니다!)"
+                reply_text = "🌗 반휴 적용을 위해 오늘 최소 30분을 달성한 구루미 타이머 사진을 전송해 주세요. (이제 텍스트 없이 사진만 보내도 됩니다!)"
             else:
                 reply_text = "🔥 타이머와 누적시간이 잘 보이는 [구루미 메인 화면] 캡처 사진을 전송해 주셔야 공부 판독이 가능합니다."
         else:
@@ -647,7 +652,7 @@ async def kakao_webhook(request: Request, background_tasks: BackgroundTasks):
                 if not is_approved:
                     return build_kakao_response(msg)
                 
-                target_override = 1 # 반휴는 목표 1시간으로 고정
+                target_override = 0.5 # 반휴는 목표 30분으로 고정
                 pending_deduct_amt = deduct_amt # 검증 통과 시 차감하기 위해 보류
 
             # 🚀 [카카오 5초 타임아웃 완전 회피]

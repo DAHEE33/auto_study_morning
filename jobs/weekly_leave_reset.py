@@ -10,7 +10,7 @@ from services.leave_reset_service import leave_reset_service
 
 def run_weekly_leave_reset_job():
     """
-    [매주 월요일 17:00(KST) 실행용]
+    [매주 월요일 05:00(KST) 실행용]
     활동 멤버의 주간휴무를 1로 초기화합니다.
     LeaveResetService 내부 마커(Admin_Config)로 중복 실행을 방지합니다.
     """

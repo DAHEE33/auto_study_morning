@@ -8,9 +8,9 @@ class SettlementEngine:
     def calculate_penalty(self, target_minutes: int, auth_minutes: int, is_late_submit: bool, is_fake_time: bool, is_fake_date: bool, is_absent: bool = False) -> int:
         """
         벌금 산정 로직
-        - 결석(아예 전송 안한 경우 거나 01~02시 목표 미달 시): -2000
-        - 시간 미달 (1시간 이상 인증): -500
-        - 시간 미달 (1시간 미만 인증): -1000
+        - 결석: -2000
+        - 시간 미달 30분 이내: -500
+        - 시간 미달 30분 초과: -1000
         - 허위 인증 (날짜/누적 오류): -1000 (날짜), -5000 (누적시간)
         """
         if is_absent:
@@ -23,7 +23,8 @@ class SettlementEngine:
             return -1000
             
         if auth_minutes < target_minutes:
-            if auth_minutes >= 60:
+            shortage = target_minutes - auth_minutes
+            if shortage <= 30:
                 return -500
             else:
                 return -1000
