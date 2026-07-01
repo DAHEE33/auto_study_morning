@@ -17,9 +17,9 @@ jobs:
           key: ${{ secrets.SSH_KEY }} # 접속에 사용했던 프라이빗 키 (.pem 파일 내용)
           port: 22
           script: |
-            cd /home/ubuntu/auto-study-management
+            cd /home/ubuntu/auto-study-morning
             git pull origin main
             source venv/bin/activate
             pip install -r requirements.txt
-            sudo systemctl restart studysync
+            sudo systemctl restart studysync-morning
             echo "Deploy Successful!"
