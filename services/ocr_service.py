@@ -22,7 +22,8 @@ class OCRService:
 
     def _parse_duration_to_minutes(self, text: str) -> int:
         """'X시간 Y분' 또는 'X시간' 또는 'Y분' 형태의 텍스트를 파싱하여 분 단위로 반환"""
-        match = re.search(r'(?:(\d+)시간)?\s*(?:(\d+)분)?', text)
+        text = text.replace(" ", "")
+        match = re.search(r'(?:(\d+)시간)?(?:(\d+)분)?', text)
         if not match:
             return 0
         h = int(match.group(1) or 0)
@@ -50,43 +51,83 @@ class OCRService:
             texts = response.text_annotations
             
             if not texts:
+                print("[OCR] 텍스트 감지 실패: 이미지에서 텍스트를 찾을 수 없음")
                 return None, 0, 0, ""
                 
             full_text = texts[0].description
+            print(f"[OCR] 원문 텍스트:\n{full_text}\n---")
+            
+            # 공백/줄바꿈 정규화
+            normalized_text = re.sub(r'\s+', ' ', full_text)
             
             # 1. 종료 시각(타임스탬프) 파싱
-            # 보통 "2026-04-15 20:49:02" 포맷을 띌 것이라 가정 (수정된 스펙 기준)
-            # 타임스탬프가 없으면 HH:MM 단독 포맷 대비.
-            dt_match = re.search(r'\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}', full_text)
+            # "2026-07-06 06:17:26" 형식
+            end_time = None
+            dt_match = re.search(r'(\d{4}[-./]\d{2}[-./]\d{2})\s*(\d{2}:\d{2}:\d{2})', normalized_text)
             if dt_match:
-                end_time = dt_match.group(0)
+                date_part = dt_match.group(1).replace('.', '-').replace('/', '-')
+                time_part = dt_match.group(2)
+                end_time = f"{date_part} {time_part}"
+                print(f"[OCR] 종료시각 감지: {end_time}")
             else:
-                hm_match = re.findall(r'\b([0-1]?[0-9]|2[0-3]):([0-5][0-9])\b', full_text)
-                end_time = f"{hm_match[-1][0]}:{hm_match[-1][1]}" if hm_match else None
+                # HH:MM:SS 또는 HH:MM 단독 형식
+                hm_match = re.findall(r'\b(\d{1,2}:\d{2}(?::\d{2})?)\b', normalized_text)
+                if hm_match:
+                    end_time = hm_match[-1]
+                    print(f"[OCR] 종료시각 감지 (시간만): {end_time}")
 
             # 2. 당일시간, 누적시간 파싱 ("X시간 Y분" 형태)
-            durations = re.findall(r'(\d+시간(?:\s*\d+분)?|\d+분)', full_text)
+            # 더 유연한 패턴: 공백, O/0 혼동 대응
+            duration_pattern = r'(\d+)\s*시\s*간\s*(\d+)\s*분|(\d+)\s*시\s*간|(\d+)\s*분'
+            duration_matches = re.findall(duration_pattern, normalized_text)
+            
+            durations = []
+            for match in duration_matches:
+                if match[0] and match[1]:  # X시간 Y분
+                    minutes = int(match[0]) * 60 + int(match[1])
+                elif match[2]:  # X시간
+                    minutes = int(match[2]) * 60
+                elif match[3]:  # Y분
+                    minutes = int(match[3])
+                else:
+                    continue
+                durations.append(minutes)
+            
+            print(f"[OCR] 감지된 시간들(분): {durations}")
             
             daily_mnts = 0
             total_mnts = 0
             
             if len(durations) == 0:
-                pass
-            elif len(durations) == 1:
-                # 하나만 인식된 경우 (보통 당일시간일 확률이 높음)
-                daily_mnts = self._parse_duration_to_minutes(durations[0])
-            else:
-                # 두 개 이상 인식되었을 경우, 당일시간과 누적시간 구분
-                # 일반적으로 누적시간이 물리적으로 더 큼
-                val1 = self._parse_duration_to_minutes(durations[0])
-                val2 = self._parse_duration_to_minutes(durations[1])
-                daily_mnts = min(val1, val2)
-                total_mnts = max(val1, val2)
+                # 대체 패턴 시도: 숫자+시간/분 형태
+                alt_pattern = r'(\d+)\s*시간\s*(\d+)\s*분|(\d+)\s*시간|(\d+)\s*분'
+                alt_matches = re.findall(alt_pattern, full_text)
+                for match in alt_matches:
+                    if match[0] and match[1]:
+                        minutes = int(match[0]) * 60 + int(match[1])
+                    elif match[2]:
+                        minutes = int(match[2]) * 60
+                    elif match[3]:
+                        minutes = int(match[3])
+                    else:
+                        continue
+                    durations.append(minutes)
+                print(f"[OCR] 대체 패턴으로 감지된 시간들(분): {durations}")
             
+            if len(durations) >= 2:
+                # 두 개 이상: 작은 값=당일, 큰 값=누적
+                daily_mnts = min(durations[0], durations[1])
+                total_mnts = max(durations[0], durations[1])
+            elif len(durations) == 1:
+                daily_mnts = durations[0]
+            
+            print(f"[OCR] 최종 파싱 결과 - 종료시각: {end_time}, 당일: {daily_mnts}분, 누적: {total_mnts}분")
             return end_time, daily_mnts, total_mnts, full_text
             
         except Exception as e:
             print(f"OCR Error: {e}")
+            import traceback
+            traceback.print_exc()
             return None, 0, 0, ""
 
 ocr_service = OCRService()
