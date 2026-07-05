@@ -54,8 +54,7 @@ def build_kakao_response(text: str) -> Dict[str, Any]:
                 {"messageText": "주휴 사용", "action": "message", "label": "🏖️ 주휴 사용"},
                 {"messageText": "월휴 사용", "action": "message", "label": "🌙 월휴 사용"},
                 {"messageText": "특휴 증빙하기", "action": "message", "label": "🏥 특휴 신청"},
-                {"messageText": "내 현황", "action": "message", "label": "📈 내 현황 확인"},
-                {"messageText": "목표 변경", "action": "message", "label": "🎯 목표시간 변경"}
+                {"messageText": "내 현황", "action": "message", "label": "📈 내 현황 확인"}
             ]
         }
     }

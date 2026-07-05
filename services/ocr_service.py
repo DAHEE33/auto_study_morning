@@ -51,11 +51,9 @@ class OCRService:
             texts = response.text_annotations
             
             if not texts:
-                print("[OCR] 텍스트 감지 실패: 이미지에서 텍스트를 찾을 수 없음")
                 return None, 0, 0, ""
                 
             full_text = texts[0].description
-            print(f"[OCR] 원문 텍스트:\n{full_text}\n---")
             
             # 공백/줄바꿈 정규화
             normalized_text = re.sub(r'\s+', ' ', full_text)
@@ -68,13 +66,11 @@ class OCRService:
                 date_part = dt_match.group(1).replace('.', '-').replace('/', '-')
                 time_part = dt_match.group(2)
                 end_time = f"{date_part} {time_part}"
-                print(f"[OCR] 종료시각 감지: {end_time}")
             else:
                 # HH:MM:SS 또는 HH:MM 단독 형식
                 hm_match = re.findall(r'\b(\d{1,2}:\d{2}(?::\d{2})?)\b', normalized_text)
                 if hm_match:
                     end_time = hm_match[-1]
-                    print(f"[OCR] 종료시각 감지 (시간만): {end_time}")
 
             # 2. 당일시간, 누적시간 파싱 ("X시간 Y분" 형태)
             # 더 유연한 패턴: 공백, O/0 혼동 대응
@@ -93,8 +89,6 @@ class OCRService:
                     continue
                 durations.append(minutes)
             
-            print(f"[OCR] 감지된 시간들(분): {durations}")
-            
             daily_mnts = 0
             total_mnts = 0
             
@@ -112,7 +106,6 @@ class OCRService:
                     else:
                         continue
                     durations.append(minutes)
-                print(f"[OCR] 대체 패턴으로 감지된 시간들(분): {durations}")
             
             if len(durations) >= 2:
                 # 두 개 이상: 작은 값=당일, 큰 값=누적
@@ -121,13 +114,10 @@ class OCRService:
             elif len(durations) == 1:
                 daily_mnts = durations[0]
             
-            print(f"[OCR] 최종 파싱 결과 - 종료시각: {end_time}, 당일: {daily_mnts}분, 누적: {total_mnts}분")
             return end_time, daily_mnts, total_mnts, full_text
             
         except Exception as e:
             print(f"OCR Error: {e}")
-            import traceback
-            traceback.print_exc()
             return None, 0, 0, ""
 
 ocr_service = OCRService()

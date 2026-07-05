@@ -24,6 +24,9 @@ async def view_dashboard(request: Request, user: str = Query(None), view: str = 
     except Exception as e:
         print(f"⚠️ 휴무 자동 갱신 체크 실패(dashboard): {e}")
 
+    # 대시보드 진입 시 항상 최신 데이터를 보여주기 위해 캐시 클리어
+    sheets_client.clear_cache()
+    
     members = sheets_client.get_sheet_records("Member_Master")
     logs = sheets_client.get_sheet_records("Daily_Log")
     
